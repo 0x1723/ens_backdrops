@@ -1,6 +1,5 @@
 import math
 import sha3
-import colorsys
 from flask import Flask
 # 29854512495791625746775787986622618014961884325760779223777139961252634542538
 # 8041138228694525761558183838270953836344146325640581694807278233190101011603
@@ -16,6 +15,9 @@ vowels = ["a", "e", "i", "o", "u", "y"]
 consonants = ["b", "c", "d", "f", "g", "h", "j", "k", "l", "m", "n", "p", "q", "r", "s", "t", "v", "w", "x", "z"]
 alphabet = [""] + vowels + consonants
 alphabet = sorted(alphabet)
+digits = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+alphanumerics = [""] + vowels + consonants + digits
+alphanumerics = sorted(alphanumerics)
 
 scrabblemeter_dict = {
 	"a": 1,
@@ -46,6 +48,52 @@ scrabblemeter_dict = {
 	"z": 10
 }
 
+def get_h_accent(h, factor=180):
+	if 0 <= h <= 360:
+		if h+factor <= 360:
+			return h+factor
+		else:
+			return h-factor
+	else:
+		raise("Value of H must be between 0 and 360")
+
+def hsl_to_rgb(hsl):
+	c = (1 - abs((2*hsl["l"]) - 1)) * hsl["s"]
+	x = c * (1 - abs(((hsl["h"]/60) % 2) - 1))
+	m = hsl["l"] - c/2
+	temp_rgb = {}
+	rgb = {}
+	if 0 <= hsl["h"] < 60:
+		temp_rgb["r"] = c
+		temp_rgb["g"] = x
+		temp_rgb["b"] = 0
+	elif 60 <= hsl["h"] < 120:
+		temp_rgb["r"] = x
+		temp_rgb["g"] = c
+		temp_rgb["b"] = 0
+	elif 120 <= hsl["h"] < 180:
+		temp_rgb["r"] = 0
+		temp_rgb["g"] = c
+		temp_rgb["b"] = x
+	elif 180 <= hsl["h"] < 240:
+		temp_rgb["r"] = 0
+		temp_rgb["g"] = x
+		temp_rgb["b"] = c
+	elif 240 <= hsl["h"] < 300:
+		temp_rgb["r"] = x
+		temp_rgb["g"] = 0
+		temp_rgb["b"] = c
+	elif 300 <= hsl["h"] <= 360:
+		temp_rgb["r"] = c
+		temp_rgb["g"] = 0
+		temp_rgb["b"] = x
+	else:
+		raise("Value of H must be between 0 and 360")
+	rgb["r"] = (temp_rgb["r"] + m) * 255
+	rgb["g"] = (temp_rgb["g"] + m) * 255
+	rgb["b"] = (temp_rgb["b"] + m) * 255
+	return rgb
+
 def get_ens_name_id(name):
 	k = sha3.keccak_256()
 	name_bytes = name.encode('ascii') 
@@ -74,14 +122,14 @@ def draw_shapes(name, accent_color):
 	if vowel_count == 0:
 		scrabblemeter_score = 0
 		for letter in name:
-			scrabblemeter_score += scrabblemeter_dict[letter]
+			if letter.isalpha():
+				scrabblemeter_score += scrabblemeter_dict[letter]
 		scrabblemeter_score = round(scrabblemeter_score / len(name), 2)
 		for i in range(len(name)):
 			cx = (i*side_length + (i+1)*side_length)/2
 			for j in range(len(name)):
 				cy = (j*side_length + (j+1)*side_length)/2
 				shapes += f'<circle cx="{cx}" cy="{cy}" fill="rgb({accent_color["r"]},{accent_color["g"]},{accent_color["b"]})" r="{stroke_width*scrabblemeter_score}" />'
-				# shapes += f'<circle cx="{cx}" cy="{cy}" fill="rgb({accent_color["r"]},{accent_color["g"]},{accent_color["b"]})" opacity="0.2" r="{side_length/4}" stroke-width="{stroke_width}"/>'
 	elif vowel_count == 1:
 		for i in range(len(name)):
 			cx = (i*side_length + (i+1)*side_length)/2
@@ -89,6 +137,13 @@ def draw_shapes(name, accent_color):
 				cy = (j*side_length + (j+1)*side_length)/2
 				shapes += f'<circle cx="{cx}" cy="{cy}" fill="rgb({accent_color["r"]},{accent_color["g"]},{accent_color["b"]})" r="{stroke_width}" />'
 				shapes += f'<circle cx="{cx}" cy="{cy}" stroke="rgb({accent_color["r"]},{accent_color["g"]},{accent_color["b"]})" fill="transparent" r="{side_length/4}" stroke-width="{stroke_width}"/>'
+	elif vowel_count == 2:
+		for i in range(len(name)):
+			cx = (i*side_length + (i+1)*side_length)/2
+			for j in range(len(name)):
+				cy = (j*side_length + (j+1)*side_length)/2
+				shapes += f'<circle cx="{cx}" cy="{cy}" fill="rgb({accent_color["r"]},{accent_color["g"]},{accent_color["b"]})" r="{stroke_width}" />'
+				shapes += f'<polyline points="{cx - side_length/4} {cy} {cx} {cy + side_length/4} {cx + side_length/4} {cy}" stroke="rgb({accent_color["r"]},{accent_color["g"]},{accent_color["b"]})" fill="transparent" stroke-width="5"/>'
 	elif vowel_count == 3:
 		# https://byjus.com/centroid-formula/
 		a = side_length/4
@@ -140,8 +195,9 @@ def draw_barcode(name, accent_color):
 def draw_scrabblemeter(name, main_color, accent_color):
 	scrabblemeter_score = 0
 	ens_name_id = get_ens_name_id(name)
-	for letter in name:
-		scrabblemeter_score += scrabblemeter_dict[letter]
+	for char in name:
+		if char.isalpha():
+			scrabblemeter_score += scrabblemeter_dict[char]
 	scrabblemeter_score = round(scrabblemeter_score / len(name), 2)
 	bar_length = len(str(ens_name_id))*10
 	bar_x = (S - bar_length) / 2
@@ -151,46 +207,42 @@ def draw_scrabblemeter(name, main_color, accent_color):
 	return scrabblemeter_svg
 
 @app.route("/<name>")
-def drawsvg(name, color_method="rgb"):
+def drawsvg(name):
 	name = name.lower()
 	main_color = {}
 	accent_color = {}
-	if color_method == "hls":
-		alpha_cap = 26
-		bit_cap = 255
-		hue_cap = 360
-		main_color["h"] = int((hue_cap/alpha_cap)*alphabet.index(name[0]))
-		main_color["s"] = round((bit_cap/alpha_cap)*alphabet.index(name[1]) / bit_cap, 2)
-		main_color["l"] = round((bit_cap/alpha_cap)*alphabet.index(name[2]) / bit_cap, 2)
-		main_color_rgb = colorsys.hls_to_rgb(main_color["h"], main_color["l"], main_color["s"])
-		main_color["r"] = main_color_rgb[0] * 255
-		main_color["g"] = main_color_rgb[1] * 255
-		main_color["b"] = main_color_rgb[2] * 255
 
-		accent_color["h"] = int((hue_cap/alpha_cap)*(alpha_cap-alphabet.index(name[0])))
-		accent_color["s"] = round((bit_cap/alpha_cap)*(alpha_cap-alphabet.index(name[1])) / bit_cap, 2)
-		accent_color["l"] = round((bit_cap/alpha_cap)*(alpha_cap-alphabet.index(name[2])) / bit_cap, 2)
-		accent_color_rgb = colorsys.hls_to_rgb(accent_color["h"], accent_color["l"], accent_color["s"])
-		accent_color["r"] = accent_color_rgb[0] * 255
-		accent_color["g"] = accent_color_rgb[0] * 255
-		accent_color["b"] = accent_color_rgb[0] * 255
+	cap = 36
+	min_sat = 0.5
+	hue_cap = 360
+	hue_count_max = 4
+
+	vowel_count = 0
+	for letter in name:
+		if letter in vowels:
+			vowel_count += 1
+
+	saturation = min_sat + ((alphanumerics.index(name[1]) / cap) * min_sat)
+	lightness = 0.3 + ((alphanumerics.index(name[2]) / cap) * 0.4)
+
+	main_color["h"] = int((hue_cap/(len(alphanumerics)-1))*alphanumerics.index(name[0]))
+	main_color["s"] = saturation
+	main_color["l"] = lightness
+
+	if len(name) <= hue_count_max:
+		accent_color["h"] = get_h_accent(main_color["h"], hue_cap/len(name))
 	else:
-		alpha_cap = 26
-		bit_cap = 255
-		main_color["r"] = int((bit_cap/alpha_cap)*alphabet.index(name[0]))
-		main_color["g"] = int((bit_cap/alpha_cap)*alphabet.index(name[1]))
-		main_color["b"] = int((bit_cap/alpha_cap)*alphabet.index(name[2]))
+		accent_color["h"] = get_h_accent(main_color["h"], hue_cap/hue_count_max)
+	accent_color["s"] = saturation
+	accent_color["l"] = lightness
 
-		accent_color["r"] = int((bit_cap/alpha_cap)*(alpha_cap-alphabet.index(name[0])))
-		accent_color["g"] = int((bit_cap/alpha_cap)*(alpha_cap-alphabet.index(name[1])))
-		accent_color["b"] = int((bit_cap/alpha_cap)*(alpha_cap-alphabet.index(name[2])))
 	backdrop = '<?xml version="1.0" encoding="utf-8" ?>\n'
 	backdrop += '<svg baseProfile="full" height="100%" version="1.1" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:ev="http://www.w3.org/2001/xml-events" xmlns:xlink="http://www.w3.org/1999/xlink"><defs />'
-	backdrop += draw_background(name, main_color)
-	backdrop += draw_shapes(name, accent_color)
-	backdrop += draw_signature_background(name, main_color)
-	backdrop += draw_barcode(name, accent_color)
-	backdrop += draw_scrabblemeter(name, main_color, accent_color)
+	backdrop += draw_background(name, hsl_to_rgb(main_color))
+	backdrop += draw_shapes(name, hsl_to_rgb(accent_color))
+	backdrop += draw_signature_background(name, hsl_to_rgb(main_color))
+	backdrop += draw_barcode(name, hsl_to_rgb(accent_color))
+	backdrop += draw_scrabblemeter(name, hsl_to_rgb(main_color), hsl_to_rgb(accent_color))
 	backdrop += '</svg>'
 	return(backdrop)
 
