@@ -237,7 +237,7 @@ def drawsvg(name):
 	accent_color["l"] = lightness
 
 	backdrop = '<?xml version="1.0" encoding="utf-8" ?>\n'
-	backdrop += '<svg baseProfile="full" height="100%" version="1.1" width="100%" xmlns="http://www.w3.org/2000/svg" xmlns:ev="http://www.w3.org/2001/xml-events" xmlns:xlink="http://www.w3.org/1999/xlink"><defs />'
+	backdrop += f'<svg preserveAspectRatio="xMinYMin meet" viewBox="0 0 {S} {S}" height="100%" width="100%" xmlns="http://www.w3.org/2000/svg">'
 	backdrop += draw_background(name, hsl_to_rgb(main_color))
 	backdrop += draw_shapes(name, hsl_to_rgb(accent_color))
 	backdrop += draw_signature_background(name, hsl_to_rgb(main_color))
